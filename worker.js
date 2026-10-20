@@ -24,9 +24,18 @@ export class CloudPlayQueue {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
     try {
       if (path === "/health" && request.method === "GET") {
-        const state = await this.state();
-        return this.reply({ ok: true, service: "CloudPlay queue", queued: state.tickets.filter(t => t.status === "queued").length, onlineHosts: this.onlineHosts(state).length });
-      }
+  const state = await this.state();
+
+  return this.reply({
+    ok: true,
+    service: "CloudPlay queue",
+    queued: state.tickets.filter(
+      ticket => ticket.status === "queued"
+    ).length,
+    onlineHosts: this.onlineHosts(state).length
+  });
+}
+
       if (path === "/queue/join" && request.method === "POST") return await this.join(await request.json());
       if (path === "/queue/status" && request.method === "GET") return await this.status(url.searchParams.get("id"));
       if (path === "/queue/leave" && request.method === "POST") return await this.leave(await request.json());
