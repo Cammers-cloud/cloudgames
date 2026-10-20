@@ -1,4 +1,5 @@
-name = "cloudplay-host-coordinator"
+# wrangler.toml
+name = 'cloudgames'
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
