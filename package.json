@@ -1,0 +1,12 @@
+{
+  "name": "cloudplay-host-coordinator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "check": "node --check worker.js && node --check host-agent/host-agent.mjs && node --check host-agent/waydroid-host-agent.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
