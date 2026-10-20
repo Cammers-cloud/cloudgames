@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudPlay — Single HTML Prototype</title>
+<style>
+:root{color-scheme:dark;--bg:#090d17;--panel:#121a2b;--line:#27334a;--blue:#67a8ff;--muted:#9aa9c2;--green:#9fe3bd;--red:#ff9b9b}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:#f4f7ff;font-family:system-ui,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 5%;border-bottom:1px solid var(--line)}
+.brand{font-size:23px;font-weight:800}.brand span{color:var(--blue)}
+.status{color:var(--green);font-size:13px}
+main{max-width:1050px;margin:auto;padding:32px 18px}
+h1{font-size:clamp(28px,5vw,44px);margin-bottom:8px}
+p{color:var(--muted);line-height:1.6}
+.layout{display:grid;grid-template-columns:1.7fr 1fr;gap:18px;margin-top:28px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;min-width:0}
+.screen{min-height:290px;background:radial-gradient(ellipse at center,#1d3557,#090d17 75%);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;overflow:hidden}
+#placeholder{max-width:100%}#placeholder h2{margin-bottom:5px}
+#remoteVideo{display:none;width:100%;max-height:70vh;aspect-ratio:16/9;object-fit:contain;background:#000;border-radius:10px}
+button{border:0;border-radius:9px;padding:11px 14px;font:inherit;font-weight:700;cursor:pointer;background:var(--blue);color:#07101f}
+button.secondary{color:#e7efff;background:#253149;border:1px solid #394862}
+button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.value{font-size:16px;margin:8px 0 20px;overflow-wrap:anywhere}
+.notice{border-left:3px solid var(--blue);padding:10px 13px;background:#19253a;color:#cbd8ee;font-size:13px;line-height:1.6}
+.stream-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px}
+.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:var(--muted);font-size:12px}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:#8793a8}
+.pill.live{color:var(--green)}.pill.live::before{background:#65d69a}
+.pill.error{color:var(--red)}.pill.error::before{background:#ff7373}
+textarea{width:100%;margin:8px 0;padding:12px;background:#090d17;color:white;border:1px solid #394862;border-radius:8px;resize:vertical}
+.input-log{background:#090d17;border:1px solid var(--line);border-radius:8px;padding:12px;min-height:48px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;color:#cbd8ee}
+#screen{outline:none}#screen:focus-visible{box-shadow:0 0 0 2px var(--blue)}
+footer{max-width:1050px;padding:20px;margin:auto;color:var(--muted);font-size:12px}
+@media(max-width:700px){.layout{grid-template-columns:1fr}.screen{min-height:230px}header{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Cloud<span>Play</span></div>
+  <div class="status" id="status">● Demo ready</div>
+</header>
+<main>
+  <p>YOUR GAMES, YOUR CLOUD</p>
+  <h1>Play without the powerful PC.</h1>
+  <p>A browser-first cloud gaming project. This prototype can display a browser-shared screen; a separate compatible game host is still needed for actual gameplay.</p>
+
+
+  <section class="card" id="queueCard" style="margin-top:20px">
+    <h2>On-demand host queue</h2>
+    <p>Request a session and wait for a registered compatible host. Queue availability is real; a ready status means the host operator reports the desktop is prepared. WebRTC connection and game input still require the host's authorized streaming/input adapter.</p>
+    <div class="layout" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-top:14px">
+      <div><div class="label">Queue status</div><div class="value" id="queueStatus">Not queued</div></div>
+      <div><div class="label">Position</div><div class="value" id="queuePosition">—</div></div>
+      <div><div class="label">Online hosts</div><div class="value" id="queueHosts">Checking…</div></div>
+      <div><div class="label">Session ticket</div><div class="value" id="queueTicket">None</div></div>
+    </div>
+    <p id="queueMessage" role="status" class="notice">Join the queue to request a host. This panel requires the Cloudflare queue backend to be deployed.</p>
+    <div class="actions">
+      <button id="joinQueue">Find a host</button>
+      <button id="refreshQueue" class="secondary">Refresh status</button>
+      <button id="leaveQueue" class="secondary" disabled>Leave queue</button>
+    </div>
+    <p class="label" style="margin-top:18px">Session lifecycle</p>
+    <div id="queueLifecycle" class="input-log">Not requested → Waiting → Host assigned → Host ready → Connect WebRTC</div>
+  </section>
+
+  <div class="layout">
+    <section class="card">
+      <div class="screen" id="screen">
+        <div id="placeholder">
+          <div style="font-size:42px">🎮</div>
+          <h2>CloudPlay</h2>
+          <p id="screenText">Ready for a streaming connection.</p>
+          <button id="launch">Start demo session</button>
+        </div>
+        <video id="remoteVideo" autoplay playsinline controls></video>
+      </div>
+      <div class="stream-tools">
+        <span class="pill" id="streamBadge">No video stream</span>
+        <span class="pill" id="resolutionBadge">Resolution: —</span>
+      </div>
+      <div class="actions">
+        <button class="secondary" id="fullscreen">Fullscreen panel</button>
+        <button class="secondary" id="playPause" disabled>Play video</button>
+        <button class="secondary" id="muteVideo" disabled>Unmute video</button>
+        <button class="secondary" id="fitVideo" disabled>Fit: contain</button>
+        <button class="secondary" id="stop">End session</button>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h2>Session details</h2>
+      <div class="label">Connection</div><div class="value" id="connection">Not connected</div>
+      <div class="label">Session</div><div class="value" id="session">No active session</div>
+      <div class="label">Streaming</div><div class="value" id="streamingDetail">Waiting for a video track</div>
+      <div class="notice" id="notice" role="status">This is a prototype. It does not connect to Roblox or host a game.</div>
+      <div class="actions"><button class="secondary" id="connectionTest">Test local WebRTC</button></div>
+    </aside>
+  </div>
+
+  <section class="card" style="margin-top:20px">
+    <h2>Remote input prototype</h2>
+    <p>This prototype sends keyboard and mouse event data to the connected peer. It does not control the other computer yet; a separate, trusted host program would be required to translate events into game input.</p>
+    <div class="actions">
+      <button class="secondary" id="toggleInput" disabled>Enable input capture</button>
+      <button class="secondary" id="clearInputLog">Clear input log</button>
+    </div>
+    <p id="inputStatus" role="status">Connect two browser sessions first. Input capture starts off.</p>
+    <div class="label">Last received input event</div>
+    <div class="input-log" id="inputLog">No input events received.</div>
+    <p class="notice">Only enable this for a peer you trust. While enabled, keyboard events are sent only when the stream panel is focused, and mouse events are sent from the video area.</p>
+  </section>
+
+  <section class="card" style="margin-top:20px">
+    <h2>Remote input test target</h2>
+    <p>When input events arrive from the other browser, this test area reacts to them. Click the stream panel in the sending session, enable input capture, then use WASD or click the video. This is a browser-only test, not operating-system or game control.</p>
+    <div id="inputTestArea" tabindex="0" role="img" aria-label="Remote input test area" style="position:relative;max-width:100%;height:240px;overflow:hidden;border:1px solid #394862;border-radius:10px;background:linear-gradient(#101a2b,#0a1020);touch-action:manipulation">
+      <div style="position:absolute;left:12px;top:10px;color:#9aa9c2;font-size:12px">REMOTE INPUT TEST · WASD / MOUSE</div>
+      <div id="testTarget" style="position:absolute;left:50%;top:55%;width:24px;height:24px;border-radius:6px;background:#67a8ff;box-shadow:0 0 18px #67a8ff88;transform:translate(-50%,-50%)"></div>
+    </div>
+    <div class="actions"><button class="secondary" id="resetInputTarget">Reset test target</button></div>
+    <p id="testTargetStatus" role="status">Waiting for remote input events.</p>
+  </section>
+
+  <section class="card" style="margin-top:20px">
+    <h2>Remote connection lab</h2>
+    <p>Use two browser sessions and exchange the offer and answer manually. Share only with a device you trust.</p>
+    <div class="actions">
+      <button class="secondary" id="shareScreen">Share screen</button>
+      <button class="secondary" id="makeOffer">Create offer</button>
+      <button class="secondary" id="makeAnswer">Create answer</button>
+      <button class="secondary" id="applyAnswer">Apply answer</button>
+      <button class="secondary" id="copySignal">Copy details</button>
+      <button class="secondary" id="closePeer">Close peer</button>
+    </div>
+    <label for="offer">Offer or answer</label>
+    <textarea id="offer" rows="5" placeholder="Paste connection details here..."></textarea>
+    <p id="peerStatus" role="status">No remote peer connected.</p>
+  </section>
+</main>
+<footer>CloudPlay prototype · Static hosting serves the interface; WebRTC tests browser-to-browser streaming. No Roblox credentials are requested or stored.</footer>
+<script>
+const $ = id => document.getElementById(id);
+let demoActive = false;
+let remotePeer = null;
+let remoteChannel = null;
+let remoteRole = null;
+let outgoingStream = null;
+let fitMode = "contain";
+let inputCaptureEnabled = false;
+let receivedInputCount = 0;
+let sentInputCount = 0;
+let lastPointerSend = 0;
+const signalBox = $("offer");
+const peerStatus = $("peerStatus");
+const video = $("remoteVideo");
+const rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+function setStreamBadge(text, state = "") {
+  const badge = $("streamBadge");
+  badge.textContent = text;
+  badge.className = "pill" + (state ? " " + state : "");
+}
+function refreshVideoControls() {
+  const hasStream = Boolean(video.srcObject);
+  $("playPause").disabled = !hasStream;
+  $("muteVideo").disabled = !hasStream;
+  $("fitVideo").disabled = !hasStream;
+  $("playPause").textContent = video.paused ? "Play video" : "Pause video";
+  $("muteVideo").textContent = video.muted ? "Unmute video" : "Mute video";
+  $("resolutionBadge").textContent = video.videoWidth ? `Resolution: ${video.videoWidth} × ${video.videoHeight}` : "Resolution: —";
+}
+function showVideo(stream) {
+  if (!stream) return;
+  video.srcObject = stream;
+  video.muted = true;
+  video.style.display = "block";
+  $("placeholder").style.display = "none";
+  $("connection").textContent = "Video track received";
+  $("streamingDetail").textContent = "Waiting for video frames";
+  setStreamBadge("Receiving video…", "live");
+  refreshVideoControls();
+  video.play().then(() => {
+    $("streamingDetail").textContent = "Video playback active";
+    setStreamBadge("Video active", "live");
+    refreshVideoControls();
+  }).catch(() => {
+    $("streamingDetail").textContent = "Video received; press Play video";
+    setStreamBadge("Video received", "live");
+    refreshVideoControls();
+  });
+}
+video.addEventListener("loadedmetadata", () => {
+  $("streamingDetail").textContent = "Video metadata received";
+  refreshVideoControls();
+});
+video.addEventListener("playing", () => {
+  $("streamingDetail").textContent = "Video playback active";
+  setStreamBadge("Video active", "live");
+  refreshVideoControls();
+});
+video.addEventListener("pause", refreshVideoControls);
+video.addEventListener("volumechange", refreshVideoControls);
+video.addEventListener("error", () => {
+  $("streamingDetail").textContent = "Video playback error";
+  setStreamBadge("Playback error", "error");
+  $("connection").textContent = "Video playback error";
+});
+$("playPause").addEventListener("click", async () => {
+  if (!video.srcObject) return;
+  if (video.paused) {
+    try { await video.play(); } catch { peerStatus.textContent = "Playback could not start. Try the video player's play control."; }
+  } else video.pause();
+  refreshVideoControls();
+});
+$("muteVideo").addEventListener("click", () => { video.muted = !video.muted; refreshVideoControls(); });
+$("fitVideo").addEventListener("click", () => {
+  fitMode = fitMode === "contain" ? "cover" : "contain";
+  video.style.objectFit = fitMode;
+  $("fitVideo").textContent = `Fit: ${fitMode}`;
+});
+$("fullscreen").addEventListener("click", async () => {
+  try {
+    if (!document.fullscreenElement) await $("screen").requestFullscreen();
+    else await document.exitFullscreen();
+  } catch { $("notice").textContent = "Fullscreen is unavailable in this browser or environment."; }
+});
+$("launch").addEventListener("click", () => {
+  demoActive = true;
+  $("status").textContent = "● Demo running";
+  $("connection").textContent = remotePeer ? "Peer connection active" : "Interface only";
+  $("session").textContent = "Demo session active";
+  $("screenText").textContent = "CloudPlay is running in your browser.";
+  $("launch").textContent = "Demo running";
+  $("launch").disabled = true;
+  $("notice").textContent = "The interface works. A separate game host is still required for real cloud gameplay.";
+});
+function stopOutgoingStream() {
+  if (outgoingStream) {
+    outgoingStream.getTracks().forEach(track => track.stop());
+    outgoingStream = null;
+  }
+}
+function closeRemotePeer(updateStatus = true) {
+  if (remotePeer) {
+    remotePeer.ontrack = null;
+    remotePeer.ondatachannel = null;
+    remotePeer.close();
+  }
+  remotePeer = null;
+  remoteChannel = null;
+  remoteRole = null;
+  if (updateStatus) peerStatus.textContent = "Peer connection closed.";
+}
+function endSession() {
+  inputCaptureEnabled = false;
+  $("toggleInput").textContent = "Enable input capture";
+  $("toggleInput").disabled = true;
+  $("inputStatus").textContent = "Session ended. Input capture is off.";
+  closeRemotePeer(false);
+  stopOutgoingStream();
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
+  video.pause();
+  video.srcObject = null;
+  video.style.display = "none";
+  $("placeholder").style.display = "block";
+  $("screenText").textContent = "Ready for a streaming connection.";
+  $("status").textContent = "● Demo ready";
+  $("connection").textContent = "Not connected";
+  $("session").textContent = "No active session";
+  $("streamingDetail").textContent = "Waiting for a video track";
+  $("launch").textContent = "Start demo session";
+  $("launch").disabled = false;
+  demoActive = false;
+  setStreamBadge("No video stream");
+  refreshVideoControls();
+  peerStatus.textContent = "Session ended.";
+  $("notice").textContent = "Session ended. No game is being hosted by this static website.";
+}
+$("stop").addEventListener("click", endSession);
+
+function waitForIce(pc) {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pc.removeEventListener("icegatheringstatechange", check);
+      reject(new Error("ICE gathering timed out. Try again or check the network."));
+    }, 20000);
+    function check() {
+      if (pc.iceGatheringState === "complete") {
+        clearTimeout(timeout);
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }
+    }
+    pc.addEventListener("icegatheringstatechange", check);
+    check();
+  });
+}
+function setupPeer() {
+  closeRemotePeer(false);
+  remotePeer = new RTCPeerConnection(rtcConfig);
+  remotePeer.ontrack = event => {
+    const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+    showVideo(stream);
+    event.track.onended = () => {
+      $("streamingDetail").textContent = "Video track ended";
+      setStreamBadge("Stream ended");
+    };
+    event.track.onunmute = () => {
+      $("streamingDetail").textContent = "Video track active";
+      setStreamBadge("Video active", "live");
+    };
+  };
+  remotePeer.onconnectionstatechange = () => {
+    if (!remotePeer) return;
+    const state = remotePeer.connectionState;
+    $("connection").textContent = state.charAt(0).toUpperCase() + state.slice(1);
+    if (state === "connected") {
+      $("status").textContent = "● Connected";
+      $("session").textContent = "Peer session active";
+    } else if (state === "failed") {
+      $("status").textContent = "● Connection failed";
+      setStreamBadge("Connection failed", "error");
+      peerStatus.textContent = "Connection failed. A restrictive network may require a relay server.";
+    } else if (state === "disconnected") {
+      $("status").textContent = "● Disconnected";
+    }
+  };
+  remotePeer.oniceconnectionstatechange = () => {
+    if (remotePeer) console.log("ICE state:", remotePeer.iceConnectionState);
+  };
+  remotePeer.ondatachannel = event => bindChannel(event.channel);
+  return remotePeer;
+}
+function bindChannel(channel) {
+  remoteChannel = channel;
+  channel.onopen = () => {
+    peerStatus.textContent = "Connected! Remote data channel is open.";
+    $("toggleInput").disabled = false;
+    $("inputStatus").textContent = "Data channel open. Input capture is off until you enable it.";
+  };
+  channel.onmessage = event => {
+    let message;
+    try { message = JSON.parse(event.data); } catch {
+      peerStatus.textContent = "Connected! Received message: " + String(event.data).slice(0, 120);
+      return;
+    }
+    if (message && message.kind === "cloudplay-input") {
+      receivedInputCount++;
+      const detail = message.type === "pointer"
+        ? `Mouse ${message.action} · x=${message.x}, y=${message.y}, button=${message.button ?? "—"}`
+        : message.type === "key"
+          ? `Key ${message.action} · ${message.key}`
+          : `Input event · ${message.action || "unknown"}`;
+      $("inputLog").textContent = `${receivedInputCount}. ${detail}`;
+      applyInputToTestTarget(message);
+      peerStatus.textContent = "Input event data received and applied to the browser test target.";
+    } else {
+      peerStatus.textContent = "Connected! Received: " + String(event.data).slice(0, 120);
+    }
+  };
+  channel.onclose = () => {
+    $("toggleInput").disabled = true;
+    inputCaptureEnabled = false;
+    $("toggleInput").textContent = "Enable input capture";
+    $("inputStatus").textContent = "Data channel closed. Input capture is off.";
+    peerStatus.textContent = "Data channel closed.";
+  };
+  channel.onerror = () => { $("inputStatus").textContent = "Data channel error. Input may not be delivered."; };
+}
+const inputTestArea = $("inputTestArea");
+const testTarget = $("testTarget");
+let targetX = 0.5;
+let targetY = 0.55;
+function renderInputTarget() {
+  testTarget.style.left = `${targetX * 100}%`;
+  testTarget.style.top = `${targetY * 100}%`;
+}
+function applyInputToTestTarget(message) {
+  if (!message || !message.type) return;
+  const step = 0.035;
+  if (message.type === "key" && message.action === "down") {
+    const key = String(message.key || "").toLowerCase();
+    if (key === "w" || key === "arrowup") targetY -= step;
+    else if (key === "s" || key === "arrowdown") targetY += step;
+    else if (key === "a" || key === "arrowleft") targetX -= step;
+    else if (key === "d" || key === "arrowright") targetX += step;
+    else return;
+    targetX = Math.max(0.04, Math.min(0.96, targetX));
+    targetY = Math.max(0.12, Math.min(0.94, targetY));
+    renderInputTarget();
+    $("testTargetStatus").textContent = `Remote key received: ${message.key}. Target position: ${(targetX * 100).toFixed(0)}%, ${(targetY * 100).toFixed(0)}%.`;
+  } else if (message.type === "pointer" && (message.action === "down" || message.action === "move")) {
+    targetX = Math.max(0.04, Math.min(0.96, Number(message.x) || 0));
+    targetY = Math.max(0.12, Math.min(0.94, Number(message.y) || 0));
+    renderInputTarget();
+    $("testTargetStatus").textContent = `Remote mouse event received. Target position: ${(targetX * 100).toFixed(0)}%, ${(targetY * 100).toFixed(0)}%.`;
+  }
+}
+$("resetInputTarget").addEventListener("click", () => {
+  targetX = 0.5;
+  targetY = 0.55;
+  renderInputTarget();
+  $("testTargetStatus").textContent = "Test target reset. Waiting for remote input events.";
+});
+
+function sendInput(message) {
+  if (!inputCaptureEnabled) return;
+  if (!remoteChannel) {
+    $("inputStatus").textContent = "Input capture is on, but no DataChannel exists. Reconnect both sessions.";
+    return;
+  }
+  if (remoteChannel.readyState !== "open") {
+    $("inputStatus").textContent = `Input capture is on, but DataChannel state is ${remoteChannel.readyState}.`;
+    return;
+  }
+  try {
+    remoteChannel.send(JSON.stringify({ kind: "cloudplay-input", ...message, sentAt: Date.now() }));
+    sentInputCount++;
+    const detail = message.type === "pointer"
+      ? `Mouse ${message.action} · x=${message.x}, y=${message.y}`
+      : `Key ${message.action} · ${message.key}`;
+    $("inputStatus").textContent = `DataChannel OPEN · sent ${sentInputCount} event(s). Last sent: ${detail}`;
+  } catch (error) {
+    $("inputStatus").textContent = "Could not send input event: " + error.message;
+  }
+}
+$("toggleInput").addEventListener("click", () => {
+  if (!remoteChannel || remoteChannel.readyState !== "open") {
+    $("inputStatus").textContent = "Connect the data channel first.";
+    return;
+  }
+  inputCaptureEnabled = !inputCaptureEnabled;
+  $("toggleInput").textContent = inputCaptureEnabled ? "Disable input capture" : "Enable input capture";
+  $("inputStatus").textContent = inputCaptureEnabled
+    ? "Input capture enabled. Focus the stream panel, then try a key or click/drag on the video."
+    : "Input capture disabled.";
+  if (inputCaptureEnabled) $("screen").focus();
+});
+$("clearInputLog").addEventListener("click", () => {
+  receivedInputCount = 0;
+  sentInputCount = 0;
+  $("inputLog").textContent = "No input events received.";
+  $("inputStatus").textContent = remoteChannel && remoteChannel.readyState === "open"
+    ? "DataChannel OPEN. Input capture is " + (inputCaptureEnabled ? "on." : "off.")
+    : "DataChannel is not open.";
+});
+$("screen").tabIndex = 0;
+$("screen").addEventListener("pointerdown", event => {
+  if (!inputCaptureEnabled || !video.srcObject || !video.contains(event.target)) return;
+  const rect = video.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  $("screen").focus();
+  sendInput({ type: "pointer", action: "down", x: +x.toFixed(4), y: +y.toFixed(4), button: event.button });
+});
+$("screen").addEventListener("pointermove", event => {
+  if (!inputCaptureEnabled || !video.srcObject || !video.contains(event.target) || !event.buttons) return;
+  const now = performance.now();
+  if (now - lastPointerSend < 50) return;
+  lastPointerSend = now;
+  const rect = video.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  sendInput({ type: "pointer", action: "move", x: +x.toFixed(4), y: +y.toFixed(4), buttons: event.buttons });
+});
+$("screen").addEventListener("pointerup", event => {
+  if (!inputCaptureEnabled || !video.srcObject || !video.contains(event.target)) return;
+  const rect = video.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  sendInput({ type: "pointer", action: "up", x: +x.toFixed(4), y: +y.toFixed(4), button: event.button });
+});
+function shouldCaptureKey(event) {
+  if (!inputCaptureEnabled) return false;
+  const target = event.target;
+  if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName))) return false;
+  return true;
+}
+document.addEventListener("keydown", event => {
+  if (!shouldCaptureKey(event)) return;
+  sendInput({ type: "key", action: "down", key: event.key, code: event.code, repeat: event.repeat });
+});
+document.addEventListener("keyup", event => {
+  if (!shouldCaptureKey(event)) return;
+  sendInput({ type: "key", action: "up", key: event.key, code: event.code });
+});
+$("shareScreen").addEventListener("click", async () => {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) throw new Error("Screen sharing is not supported here.");
+    stopOutgoingStream();
+    outgoingStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const track = outgoingStream.getVideoTracks()[0];
+    if (!track) throw new Error("No screen video track was selected.");
+    track.addEventListener("ended", () => {
+      if (outgoingStream) outgoingStream = null;
+      peerStatus.textContent = "Screen sharing stopped. Create a fresh offer if you share again.";
+    }, { once: true });
+    peerStatus.textContent = "Screen selected. Click Create offer next.";
+  } catch (error) {
+    peerStatus.textContent = error.message || "Screen sharing cancelled or unavailable.";
+  }
+});
+$("makeOffer").addEventListener("click", async () => {
+  try {
+    const pc = setupPeer();
+    remoteRole = "offerer";
+    bindChannel(pc.createDataChannel("cloudplay"));
+    if (outgoingStream) outgoingStream.getTracks().forEach(track => pc.addTrack(track, outgoingStream));
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    peerStatus.textContent = "Gathering connection details…";
+    await waitForIce(pc);
+    signalBox.value = JSON.stringify(pc.localDescription);
+    peerStatus.textContent = "Offer ready. Copy it to the receiver.";
+  } catch (error) { peerStatus.textContent = "Offer failed: " + error.message; }
+});
+$("makeAnswer").addEventListener("click", async () => {
+  try {
+    const offer = JSON.parse(signalBox.value);
+    if (offer.type !== "offer") throw new Error("Paste an offer first.");
+    const pc = setupPeer();
+    remoteRole = "answerer";
+    await pc.setRemoteDescription(offer);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    peerStatus.textContent = "Gathering connection details…";
+    await waitForIce(pc);
+    signalBox.value = JSON.stringify(pc.localDescription);
+    peerStatus.textContent = "Answer ready. Copy it back to the offerer.";
+  } catch (error) { peerStatus.textContent = "Answer failed: " + error.message; }
+});
+$("applyAnswer").addEventListener("click", async () => {
+  try {
+    if (!remotePeer || remoteRole !== "offerer") throw new Error("Create an offer first in this session.");
+    const answer = JSON.parse(signalBox.value);
+    if (answer.type !== "answer") throw new Error("Paste the answer from the receiver.");
+    await remotePeer.setRemoteDescription(answer);
+    peerStatus.textContent = "Answer applied. Connecting…";
+  } catch (error) { peerStatus.textContent = "Apply failed: " + error.message; }
+});
+$("copySignal").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(signalBox.value);
+    peerStatus.textContent = "Connection details copied.";
+  } catch { signalBox.focus(); signalBox.select(); peerStatus.textContent = "Select the text and copy it manually."; }
+});
+$("closePeer").addEventListener("click", () => closeRemotePeer());
+
+$("connectionTest").addEventListener("click", async () => {
+  const button = $("connectionTest");
+  button.disabled = true;
+  button.textContent = "Testing…";
+  let pc1, pc2, timeout;
+  try {
+    pc1 = new RTCPeerConnection({ iceServers: [] });
+    pc2 = new RTCPeerConnection({ iceServers: [] });
+    const channel = pc1.createDataChannel("cloudplay-test");
+    const received = new Promise((resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error("Connection timed out")), 12000);
+      channel.onopen = () => channel.send("ok");
+      pc2.ondatachannel = event => { event.channel.onmessage = message => { if (message.data === "ok") resolve(); }; };
+    });
+    const offer = await pc1.createOffer();
+    await pc1.setLocalDescription(offer);
+    await waitForIce(pc1);
+    await pc2.setRemoteDescription(pc1.localDescription);
+    const answer = await pc2.createAnswer();
+    await pc2.setLocalDescription(answer);
+    await waitForIce(pc2);
+    await pc1.setRemoteDescription(pc2.localDescription);
+    await received;
+    $("notice").textContent = "Local WebRTC test passed. This checks a local browser peer connection, not remote internet reachability.";
+    button.textContent = "Test passed";
+  } catch (error) {
+    $("notice").textContent = "Local WebRTC test failed: " + error.message;
+    button.textContent = "Retry local WebRTC";
+  } finally {
+    clearTimeout(timeout);
+    if (pc1) pc1.close();
+    if (pc2) pc2.close();
+    button.disabled = false;
+  }
+});
+
+// Queue client: uses Cloudflare Pages Functions at /api/*. The backend must be deployed separately; a static HTML file cannot run the Durable Object queue itself.
+const queue = { ticketId: null, timer: null, busy: false };
+const queueClientKey = "cloudplay-client-id-v1";
+function clientId() {
+  let id = localStorage.getItem(queueClientKey);
+  if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : "cp-" + Date.now() + "-" + Math.random().toString(16).slice(2)); localStorage.setItem(queueClientKey, id); }
+  return id;
+}
+function queueText(id, text) { $(id).textContent = text; }
+function queueSetBusy(value) {
+  queue.busy = value;
+  $("joinQueue").disabled = value || Boolean(queue.ticketId);
+  $("leaveQueue").disabled = value || !queue.ticketId;
+}
+async function queueRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch("/api" + path, {
+      cache: "no-store",
+      ...options,
+      headers: {
+        "content-type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+  } catch (error) {
+    throw new Error(`Network request failed for /api${path}: ${error.message || error}`);
+  }
+
+  const routeHeader = response.headers.get("x-cloudplay-route");
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; }
+  catch { data = { responseText: raw.slice(0, 240) }; }
+
+  if (!response.ok) {
+    const details = data.error || data.message || data.responseText || response.statusText || "No response details";
+    const route = routeHeader ? `; route=${routeHeader}` : "; route header missing";
+    throw new Error(`Request /api${path} returned HTTP ${response.status}: ${details}${route}`);
+  }
+  return data;
+}
+function renderQueue(data) {
+  if (data.id) queue.ticketId = data.id;
+  queueText("queueStatus", data.status || "Unknown");
+  queueText("queuePosition", data.status === "queued" ? String(data.position || "—") : data.status === "ready" ? "Host ready" : data.status === "assigned" ? "Host assigned" : "—");
+  queueText("queueHosts", String(data.onlineHosts ?? "—"));
+  queueText("queueTicket", data.id ? data.id.slice(0, 8) + "…" : "None");
+  queueText("queueMessage", data.message || data.error || "Queue status updated.");
+  queueText("queueLifecycle", data.status === "queued" ? `Requested → Waiting (position ${data.position || "—"}) → Host assigned → Host ready → Connect WebRTC` :
+    data.status === "assigned" ? "Requested → Waiting → Host assigned → Preparing desktop → Connect WebRTC" :
+    data.status === "ready" ? "Requested → Waiting → Host assigned → Host ready → Open Remote connection lab and complete WebRTC handshake" :
+    data.status === "cancelled" ? "Request cancelled" : data.status === "failed" ? "Host failed → Request ended; join again to retry" : "Not requested → Waiting → Host assigned → Host ready → Connect WebRTC");
+  queueSetBusy(false);
+  $("joinQueue").disabled = Boolean(queue.ticketId) && ["queued","assigned","ready"].includes(data.status);
+  $("leaveQueue").disabled = !queue.ticketId || !["queued","assigned"].includes(data.status);
+  if (["failed","cancelled","finished"].includes(data.status)) queue.ticketId = null;
+  if (data.status === "ready") {
+    $("notice").textContent = "A host reports its desktop is ready. Open the Remote connection lab and complete the WebRTC handshake; the queue does not itself create the video or OS input connection.";
+  }
+}
+async function refreshQueue() {
+  try {
+    if (queue.ticketId) {
+      const data = await queueRequest(`/queue/status?id=${encodeURIComponent(queue.ticketId)}`, { method: "GET", headers: {} });
+      renderQueue(data);
+    } else {
+      const data = await queueRequest("/health", { method: "GET", headers: {} });
+      queueText("queueHosts", String(data.onlineHosts ?? 0));
+      queueText("queueMessage", `Queue service reachable. ${data.queued ?? 0} request(s) waiting. Click Find a host to enter the queue.`);
+    }
+  } catch (error) {
+    queueText("queueStatus", "Backend unavailable");
+    queueText("queueMessage", error.message + " Check Cloudflare Pages Functions and the CLOUDPLAY_QUEUE binding.");
+    queueText("queueHosts", "—");
+  }
+}
+$("joinQueue").addEventListener("click", async () => {
+  queueSetBusy(true);
+  queueText("queueMessage", "Submitting host request…");
+  try {
+    const data = await queueRequest("/queue/join", { method: "POST", body: JSON.stringify({ clientId: clientId() }) });
+    renderQueue(data);
+    if (!queue.timer) queue.timer = setInterval(refreshQueue, 5000);
+  } catch (error) { queueText("queueMessage", error.message); queueSetBusy(false); }
+});
+$("refreshQueue").addEventListener("click", refreshQueue);
+$("leaveQueue").addEventListener("click", async () => {
+  if (!queue.ticketId) return;
+  queueSetBusy(true);
+  try {
+    const data = await queueRequest("/queue/leave", { method: "POST", body: JSON.stringify({ id: queue.ticketId }) });
+    queue.ticketId = null;
+    renderQueue(data);
+    queue.ticketId = null;
+    queueSetBusy(false);
+    queueText("queueTicket", "None");
+    queueText("queueStatus", "Not queued");
+  } catch (error) { queueText("queueMessage", error.message); queueSetBusy(false); }
+});
+refreshQueue();
+
+</script>
+</body>
+</html>
