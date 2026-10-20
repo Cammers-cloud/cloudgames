@@ -1,5 +1,6 @@
+
 import { forwardToQueue } from "../_forward.js";
 
-export async function onRequest(context) {
+export async function onRequestPost(context) {
   return forwardToQueue(context, "/queue/join");
 }
